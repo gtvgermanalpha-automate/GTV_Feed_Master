@@ -11,28 +11,34 @@ import xml.etree.ElementTree as ET
 import base64
 import csv
 
+# =====================================================
+# EBAY DE → ONBUY GERMANY AUTOMATION
+# =====================================================
+
 # ================= CONFIG =================
 EBAY_CLIENT_ID = os.getenv("EBAY_CLIENT_ID")
 EBAY_CLIENT_SECRET = os.getenv("EBAY_CLIENT_SECRET")
 
 # ================= SETTINGS =================
 
-# TRUE = FETCH ALL PRODUCTS
-# FALSE = SMART BATCHING
-FULL_REFRESH = False
+# TRUE = FULL REFRESH
+# FALSE = SMART SYNC
+FULL_REFRESH = True
 
-# AFTER FIRST FULL FETCH
-# CHANGE TO 12 OR 20
-MAX_PRODUCTS_PER_RUN = 12
+# MAX PRODUCTS PER RUN
+MAX_PRODUCTS_PER_RUN = 999999
 
 # CATEGORY REMAP
 RUN_CATEGORY_MAPPING = True
 
 # PRICING
 MIN_PROFIT_PERCENT = 15
-DEFAULT_MARKUP_PERCENT = 40
+DEFAULT_MARKUP_PERCENT = 60
 
-PK_TZ = ZoneInfo("Asia/Karachi")
+# EBAY MARKETPLACE
+EBAY_MARKETPLACE = "EBAY_DE"
+
+PK_TZ = ZoneInfo("Europe/Berlin")
 
 # ================= GOOGLE SHEET =================
 scope = [
@@ -52,7 +58,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(
 client = gspread.authorize(creds)
 
 sheet = client.open(
-    "GTV_Feed_Master"
+    "OnBuy_Germany_Master"
 ).sheet1
 
 data = sheet.get_all_records()
@@ -70,7 +76,7 @@ print(f"📊 TOTAL ROWS IN SHEET: {len(data)}")
 ONBUY_CATEGORIES = []
 
 with open(
-    "onbuy_categories_only.csv",
+    "onbuy_categories_germany.csv",
     newline='',
     encoding='utf-8'
 ) as csvfile:
@@ -88,7 +94,7 @@ with open(
 
 print(
     f"📂 Loaded {len(ONBUY_CATEGORIES)} "
-    f"OnBuy categories"
+    f"German OnBuy categories"
 )
 
 VALID_ONBUY_CATEGORIES = set(
@@ -184,7 +190,6 @@ def clean_images(images):
 
     return ",".join(imgs[:10])
 
-# ================= HTML SAFE LIMIT =================
 def trim_html_description(desc, limit=45000):
 
     if not desc:
@@ -199,12 +204,10 @@ def trim_html_description(desc, limit=45000):
     )
 
     if len(desc) > limit:
-
         desc = desc[:limit]
 
     return desc
 
-# ================= EMPTY RESPONSE =================
 def empty_ebay_response():
 
     return {
@@ -304,14 +307,13 @@ def get_ebay_data(url, token):
             "https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id",
             headers={
                 "Authorization": f"Bearer {token}",
-                "X-EBAY-C-MARKETPLACE-ID": "EBAY_GB"
+                "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE
             },
             params={
                 "legacy_item_id": item_id
             }
         )
 
-        # ================= REMOVED =================
         if res.status_code == 404:
 
             print(f"REMOVED LISTING: {item_id}")
@@ -442,11 +444,8 @@ def get_ebay_data(url, token):
                 )
 
                 if isinstance(values, list):
-
                     brand = values[0]
-
                 else:
-
                     brand = values
 
         return {
@@ -468,7 +467,7 @@ def get_ebay_data(url, token):
 # ================= CATEGORY MAPPING =================
 if RUN_CATEGORY_MAPPING:
 
-    print("\n🔄 Updating Categories...")
+    print("\n🔄 Updating German Categories...")
 
     category_updates = []
 
@@ -576,7 +575,7 @@ for idx, row in sorted_data[:MAX_PRODUCTS_PER_RUN]:
 
     updates = [
         {
-            "range": f"{col_letter(col_map['Cost Price (£)'])}{i}",
+            "range": f"{col_letter(col_map['Cost Price (€)'])}{i}",
             "values": [[cost_price]]
         },
         {
@@ -584,7 +583,7 @@ for idx, row in sorted_data[:MAX_PRODUCTS_PER_RUN]:
             "values": [[stock]]
         },
         {
-            "range": f"{col_letter(col_map['Selling Price (£)'])}{i}",
+            "range": f"{col_letter(col_map['Selling Price (€)'])}{i}",
             "values": [[selling_price]]
         },
         {
@@ -692,7 +691,7 @@ for row in sheet.get_all_records():
         )
 
         price = float(
-            row.get("Selling Price (£)") or 0
+            row.get("Selling Price (€)") or 0
         )
 
         stock = int(
@@ -787,13 +786,15 @@ for row in sheet.get_all_records():
 
         feed_count += 1
 
-    except:
+    except Exception as e:
+
+        print(f"XML Error: {e}")
 
         skipped_feed += 1
 
 # ================= SAVE XML =================
 ET.ElementTree(root).write(
-    "feed.xml",
+    "feed_de.xml",
     encoding="utf-8",
     xml_declaration=True
 )
