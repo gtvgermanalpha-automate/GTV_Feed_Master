@@ -76,7 +76,7 @@ print(f"📊 TOTAL ROWS IN SHEET: {len(data)}")
 ONBUY_CATEGORIES = []
 
 with open(
-    "onbuy_categories_germany.csv",
+    "onbuy_categories_only.csv",
     newline='',
     encoding='utf-8'
 ) as csvfile:
